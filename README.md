@@ -4,6 +4,9 @@ Production-ready Angie web server with ModSecurity WAF, Fail2Ban, OWASP CRS 4.x,
 
 [![CI](https://github.com/hvaclab/angie-modsecurity-docker/actions/workflows/ci.yml/badge.svg)](https://github.com/hvaclab/angie-modsecurity-docker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)](https://docs.docker.com/compose/)
+[![Angie](https://img.shields.io/badge/Angie-1.10.3-green.svg)](https://angie.software/)
+[![OWASP CRS](https://img.shields.io/badge/OWASP%20CRS-4.18.0-orange.svg)](https://coreruleset.org/)
 
 ## Features
 
