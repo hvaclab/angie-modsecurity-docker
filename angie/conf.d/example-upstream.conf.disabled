@@ -1,0 +1,260 @@
+# ==============================================================================
+# Пример конфигурации с upstream (Docker контейнеры)
+# ==============================================================================
+# Файл: example-upstream.conf.disabled
+#
+# Чтобы активировать: mv example-upstream.conf.disabled example-upstream.conf
+# Чтобы деактивировать: mv example-upstream.conf example-upstream.conf.disabled
+#
+# ПРОБЛЕМА:
+# Если upstream контейнер не запущен → Angie не запустится с ошибкой:
+# "host not found in upstream" или "no resolver defined to resolve"
+#
+# РЕШЕНИЕ 1: Использовать resolver (DNS) ✅
+# РЕШЕНИЕ 2: Использовать переменные ✅
+# РЕШЕНИЕ 3: Graceful degradation (возвращать 503) ✅
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Вариант 1: С резолвером (рекомендуется для Docker)
+# ------------------------------------------------------------------------------
+
+upstream backend_safe {
+    # ВАЖНО: Указать resolver для динамического разрешения имён Docker контейнеров
+    # Docker DNS: 127.0.0.11 (внутри контейнера)
+    # Или использовать host.docker.internal
+
+    # Для Docker: использовать имя контейнера как переменную
+    # чтобы Angie не проверял доступность при старте
+    server backend:8080 max_fails=3 fail_timeout=30s;
+
+    # Если нужно несколько инстансов (load balancing):
+    # server backend1:8080 weight=1 max_fails=3 fail_timeout=30s;
+    # server backend2:8080 weight=1 max_fails=3 fail_timeout=30s;
+}
+
+# Resolver для Docker контейнеров
+# ВНИМАНИЕ: Resolver ДОЛЖЕН быть в секции http {} или stream {}
+# В данном примере он будет в http {} в angie.conf
+# resolver 127.0.0.11 valid=10s;  # Docker DNS
+# resolver 8.8.8.8 8.8.4.4 valid=300s;  # Публичный DNS (запасной)
+
+server {
+    listen 443 ssl http2;
+    listen 443 quic reuseport;
+
+    http2 on;
+
+    server_name backend.example.com;
+
+    # SSL сертификаты
+    ssl_certificate     /etc/letsencrypt/live/backend.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/backend.example.com/privkey.pem;
+
+    # Security headers
+    include /etc/angie/includes/security/security-headers.conf;
+
+    # ModSecurity (опционально)
+    # modsecurity on;
+    # modsecurity_rules_file /etc/angie/modsecurity/rules.conf;
+
+    # Rate Limiting
+    location / {
+        limit_req zone=general burst=20 nodelay;
+
+        # Проксирование в upstream
+        proxy_pass http://backend_safe;
+
+        # Стандартные proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Таймауты
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+
+        # Обработка ошибок upstream
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+
+        # Если upstream недоступен → показать 503 вместо падения Angie
+        error_page 502 503 504 /50x.html;
+    }
+
+    # Страница ошибки если backend недоступен
+    location = /50x.html {
+        root /usr/share/angie/html;
+        internal;
+    }
+}
+
+# ------------------------------------------------------------------------------
+# Вариант 2: С переменной (Angie не проверяет при старте)
+# ------------------------------------------------------------------------------
+
+server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/api.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+
+    include /etc/angie/includes/security/security-headers.conf;
+
+    location / {
+        limit_req zone=api burst=10 nodelay;
+
+        # ТРЮК: Использовать переменную для upstream
+        # Angie не будет проверять доступность при старте
+        set $backend_host "backend:8080";
+
+        proxy_pass http://$backend_host;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Если backend недоступен
+        proxy_connect_timeout 2s;
+        error_page 502 503 504 = @backend_down;
+    }
+
+    # Fallback если backend недоступен
+    location @backend_down {
+        return 503 '{"error": "Service temporarily unavailable", "message": "Backend is down"}';
+        add_header Content-Type application/json always;
+    }
+}
+
+# ------------------------------------------------------------------------------
+# Вариант 3: С graceful degradation (возвращать статический контент)
+# ------------------------------------------------------------------------------
+
+server {
+    listen 443 ssl http2;
+    server_name app.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/app.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
+
+    include /etc/angie/includes/security/security-headers.conf;
+
+    # Сначала пытаться отдать из статики
+    root /var/www/app;
+
+    location / {
+        # Попробовать отдать статический файл
+        # Если не найден → проксировать в backend
+        # Если backend недоступен → показать maintenance.html
+        try_files $uri $uri/ @backend;
+    }
+
+    location @backend {
+        set $backend_host "app-backend:3000";
+        proxy_pass http://$backend_host;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_connect_timeout 1s;
+
+        # Если backend недоступен → maintenance page
+        error_page 502 503 504 = @maintenance;
+    }
+
+    location @maintenance {
+        # Показать страницу обслуживания
+        try_files /maintenance.html =503;
+    }
+}
+
+# ------------------------------------------------------------------------------
+# Вариант 4: Host.docker.internal (для доступа к хосту)
+# ------------------------------------------------------------------------------
+
+server {
+    listen 443 ssl http2;
+    server_name host.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/host.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/host.example.com/privkey.pem;
+
+    include /etc/angie/includes/security/security-headers.conf;
+
+    location / {
+        # Проксирование на хост (не Docker контейнер)
+        # В compose.yml нужно добавить:
+        # extra_hosts:
+        #   - "host.docker.internal:host-gateway"
+
+        set $host_backend "host.docker.internal:8080";
+        proxy_pass http://$host_backend;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        error_page 502 503 504 = @host_down;
+    }
+
+    location @host_down {
+        return 503 "Service on host is unavailable";
+        add_header Content-Type text/plain always;
+    }
+}
+
+# ------------------------------------------------------------------------------
+# HTTP → HTTPS редирект (для всех примеров выше)
+# ------------------------------------------------------------------------------
+
+server {
+    listen 80;
+    server_name backend.example.com api.example.com app.example.com host.example.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ==============================================================================
+# ВАЖНЫЕ НАСТРОЙКИ В angie.conf
+# ==============================================================================
+#
+# Добавить в секцию http {}:
+#
+# # Resolver для Docker DNS (обязательно!)
+# resolver 127.0.0.11 valid=10s ipv6=off;
+# resolver_timeout 5s;
+#
+# ==============================================================================
+
+# ==============================================================================
+# ТЕСТИРОВАНИЕ
+# ==============================================================================
+#
+# 1. Проверка конфигурации (должна пройти даже если backend недоступен):
+#    docker exec angie angie -t
+#
+# 2. Запуск Angie:
+#    docker restart angie
+#
+# 3. Проверка когда backend недоступен:
+#    curl -I https://backend.example.com
+#    # Должен вернуть 503 (не падение Angie)
+#
+# 4. Запуск backend:
+#    docker start backend
+#
+# 5. Проверка когда backend доступен:
+#    curl -I https://backend.example.com
+#    # Должен вернуть 200 (проксирование работает)
+#
+# ==============================================================================

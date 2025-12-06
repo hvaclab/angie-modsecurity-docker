@@ -1,0 +1,53 @@
+# ==============================================================================
+# Vector - Log Pipeline (Уровень 2) - Упрощенная версия
+# ==============================================================================
+
+[sources.angie_logs]
+type = "file"
+include = ["/var/log/angie/access.log"]
+read_from = "end"
+
+[transforms.parse_json]
+type = "remap"
+inputs = ["angie_logs"]
+source = '''
+  . = parse_json!(.message)
+
+  # Добавляем метаданные
+  .meta_enriched_by = "vector"
+  .meta_enriched_at = now()
+
+  # Вычисляем security_score
+  score = 0
+  if exists(.security_suspicious_ua) && .security_suspicious_ua == "1" {
+    score = score + 5
+  }
+  if exists(.security_suspicious_pattern) && .security_suspicious_pattern == "1" {
+    score = score + 7
+  }
+  if exists(.security_suspicious_xff) && .security_suspicious_xff == "1" {
+    score = score + 3
+  }
+  .security_score = score
+
+  # Security threat level
+  .security_threat_level = if score == 0 {
+    "safe"
+  } else if score < 5 {
+    "low"
+  } else if score < 10 {
+    "medium"
+  } else {
+    "high"
+  }
+'''
+
+[sinks.enriched_logs]
+type = "file"
+inputs = ["parse_json"]
+path = "/var/log/angie/access_enriched.log"
+encoding.codec = "json"
+
+[sinks.enriched_logs.buffer]
+type = "disk"
+max_size = 268435488

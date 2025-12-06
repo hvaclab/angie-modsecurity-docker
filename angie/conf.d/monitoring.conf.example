@@ -1,0 +1,135 @@
+# ==============================================================================
+# Monitoring Server - VTS Dashboard & Metrics
+# ==============================================================================
+# Копируйте в monitoring.conf и настройте по необходимости
+# ==============================================================================
+
+server {
+    # Слушаем только на localhost для безопасности
+    listen 127.0.0.1:8080;
+    listen [::1]:8080;
+
+    server_name _;
+
+    # Отключаем логирование мониторинга (снижение I/O)
+    access_log off;
+    error_log /var/log/angie/monitoring-error.log error;
+
+    # ------------------------------------------------------------------------------
+    # HTML Dashboard - Visual metrics
+    # ------------------------------------------------------------------------------
+    location /status {
+        vhost_traffic_status_display;
+        vhost_traffic_status_display_format html;
+
+        # Доступ только с localhost и Docker networks
+        allow 127.0.0.1;
+        allow ::1;
+        allow 172.16.0.0/12;  # Docker networks
+        allow 10.0.0.0/8;     # Private networks
+        allow 192.168.0.0/16; # Private networks
+        deny all;
+    }
+
+    # ------------------------------------------------------------------------------
+    # JSON API - For custom monitoring tools
+    # ------------------------------------------------------------------------------
+    location /status/json {
+        vhost_traffic_status_display;
+        vhost_traffic_status_display_format json;
+
+        allow 127.0.0.1;
+        allow ::1;
+        allow 172.16.0.0/12;
+        deny all;
+
+        # CORS для локальных инструментов
+        add_header 'Access-Control-Allow-Origin' '*' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, OPTIONS' always;
+    }
+
+    # ------------------------------------------------------------------------------
+    # Prometheus Metrics - For Prometheus/Grafana
+    # ------------------------------------------------------------------------------
+    location /metrics {
+        vhost_traffic_status_display;
+        vhost_traffic_status_display_format prometheus;
+
+        allow 127.0.0.1;
+        allow ::1;
+        allow 172.16.0.0/12;
+        deny all;
+    }
+
+    # ------------------------------------------------------------------------------
+    # Angie Stub Status - Basic metrics
+    # ------------------------------------------------------------------------------
+    location /nginx_status {
+        stub_status;
+
+        allow 127.0.0.1;
+        allow ::1;
+        allow 172.16.0.0/12;
+        deny all;
+    }
+
+    # ------------------------------------------------------------------------------
+    # Health Check Endpoint
+    # ------------------------------------------------------------------------------
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+
+        allow all;  # Доступен всем для load balancers
+    }
+
+    # ------------------------------------------------------------------------------
+    # Version Info (опционально)
+    # ------------------------------------------------------------------------------
+    # location /version {
+    #     return 200 '{"version":"1.0.0","build":"2025-11-25"}\n';
+    #     add_header Content-Type application/json;
+    # }
+}
+
+# ==============================================================================
+# Доступ к метрикам
+# ==============================================================================
+# HTML Dashboard:   http://localhost:8080/status
+# JSON API:         http://localhost:8080/status/json
+# Prometheus:       http://localhost:8080/metrics
+# Basic Status:     http://localhost:8080/nginx_status
+# Health Check:     http://localhost:8080/health
+# ==============================================================================
+
+# ==============================================================================
+# Prometheus Configuration
+# ==============================================================================
+# Добавьте в prometheus.yml:
+#
+# scrape_configs:
+#   - job_name: 'angie'
+#     scrape_interval: 15s
+#     static_configs:
+#       - targets: ['angie:8080']
+#     metrics_path: '/metrics'
+# ==============================================================================
+
+# ==============================================================================
+# Docker Compose Integration
+# ==============================================================================
+# Раскомментируйте порты в compose.yml если нужен доступ снаружи:
+#
+# services:
+#   angie:
+#     ports:
+#       - "127.0.0.1:8080:8080"  # Monitoring только с хоста
+# ==============================================================================
+
+# ==============================================================================
+# Grafana Dashboard
+# ==============================================================================
+# Import dashboard ID: 2949 (nginx-vts-stats)
+# https://grafana.com/grafana/dashboards/2949
+# ==============================================================================

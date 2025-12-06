@@ -1,0 +1,80 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+LICENSE
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Certificates and secrets
+certs/
+*.pem
+*.key
+*.crt
+.env
+.env.*
+!.env.example
+
+# Fail2Ban DB
+fail2ban/db/*.sqlite3
+fail2ban/db/*.sqlite3-*
+
+# GeoIP databases (download separately)
+geoip/*.mmdb
+geoip/*.dat
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.tar.gz
+*.zip
+
+# Docker configs (not needed in image)
+compose*.yml
+docker-compose*.yml
+.dockerignore
+
+# Scripts (mounted via volumes)
+scripts/
+
+# Testing
+test/
+tests/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Vector, fail2ban (mounted via volumes)
+vector/
+fail2ban/
+
+# Web content (mounted via volumes)
+web/
+
+# Errors pages (mounted via volumes)
+errors/
+
+# ModSecurity exclusions (mounted)
+modsec/exclusions.conf

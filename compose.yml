@@ -1,0 +1,208 @@
+# Docker Compose file format: Compose Specification
+# Compatible with: Docker Compose v2.0+
+# https://docs.docker.com/compose/compose-file/
+
+# Logging configuration (reusable)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  angie:
+    build:
+      context: ./angie
+      dockerfile: Dockerfile
+    image: angie-with-modsec:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-angie}-web
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443/tcp"
+      - "${HTTPS_PORT:-443}:443/udp"  # HTTP/3 (QUIC)
+    environment:
+      - TZ=${TZ:-UTC}
+      - AUTO_UPDATE_GEOIP=${AUTO_UPDATE_GEOIP:-false}
+      - GEOIP_MAX_AGE_DAYS=${GEOIP_MAX_AGE_DAYS:-30}
+    volumes:
+      # Main config
+      - ./angie/angie.conf:/etc/angie/angie.conf:ro
+      # Includes directory (auth, security, logs)
+      - ./angie/includes:/etc/angie/includes:ro
+      # Virtual hosts and stream configs
+      - ./angie/conf.d:/etc/angie/conf.d:ro
+      - ./angie/stream.d:/etc/angie/stream.d:ro
+      # GeoIP databases (rw for auto-download)
+      - ./geoip:/etc/angie/geoip
+      # SSL certificates (rw for auto-generation)
+      - ./certs:/etc/angie/ssl
+      # Logs
+      - ./logs:/var/log/angie
+      # ModSecurity
+      - ./modsec:/etc/angie/modsecurity:ro
+      # Web root
+      - ./web:/var/www/html:ro
+      # Error pages
+      - ./errors:/var/www/errors:ro
+      # ACME data (built-in ACME client)
+      - acme_data:/var/lib/angie/acme
+    networks:
+      - angie_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    labels:
+      - "com.angie-modsecurity-docker.service=angie"
+      - "com.angie-modsecurity-docker.description=Angie web server with ModSecurity WAF"
+
+  # OAuth2 Proxy for Keycloak authentication (optional)
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    container_name: ${COMPOSE_PROJECT_NAME:-angie}-oauth2
+    restart: unless-stopped
+    profiles:
+      - oauth2
+    environment:
+      # Keycloak OIDC settings
+      - OAUTH2_PROXY_PROVIDER=keycloak-oidc
+      - OAUTH2_PROXY_OIDC_ISSUER_URL=${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
+      - OAUTH2_PROXY_CLIENT_ID=${KEYCLOAK_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      - OAUTH2_PROXY_REDIRECT_URL=${KEYCLOAK_REDIRECT_URI}
+      # Cookie settings
+      - OAUTH2_PROXY_COOKIE_SECRET=${KEYCLOAK_COOKIE_SECRET}
+      - OAUTH2_PROXY_COOKIE_NAME=${KEYCLOAK_COOKIE_NAME:-_oauth2_proxy}
+      - OAUTH2_PROXY_COOKIE_SECURE=true
+      - OAUTH2_PROXY_COOKIE_HTTPONLY=true
+      - OAUTH2_PROXY_COOKIE_SAMESITE=lax
+      # Proxy settings
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+      - OAUTH2_PROXY_REVERSE_PROXY=true
+      - OAUTH2_PROXY_SET_XAUTHREQUEST=true
+      - OAUTH2_PROXY_PASS_ACCESS_TOKEN=true
+      - OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER=true
+      # Email domain (allow all or specify domain)
+      - OAUTH2_PROXY_EMAIL_DOMAINS=*
+      # Skip auth for health checks
+      - OAUTH2_PROXY_SKIP_AUTH_ROUTES=^/health$
+      # Whitelist domains for redirects
+      - OAUTH2_PROXY_WHITELIST_DOMAINS=${OAUTH2_WHITELIST_DOMAINS:-.example.com,.example.org}
+      # Keycloak uses 'azp' instead of 'aud' claim
+      - OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES=${KEYCLOAK_CLIENT_ID}
+      - OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL=true
+      - OAUTH2_PROXY_INSECURE_OIDC_SKIP_ISSUER_VERIFICATION=false
+      - OAUTH2_PROXY_OIDC_AUDIENCE_CLAIMS=azp
+      # Logging
+      - OAUTH2_PROXY_LOGGING_FILENAME=/dev/stdout
+    networks:
+      - angie_network
+    depends_on:
+      angie:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4180/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    labels:
+      - "com.angie-modsecurity-docker.service=oauth2-proxy"
+      - "com.angie-modsecurity-docker.description=OAuth2 authentication proxy"
+
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-angie}-fail2ban
+    restart: unless-stopped
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./logs:/var/log/angie:ro
+      - ./fail2ban:/data
+    healthcheck:
+      test: ["CMD", "fail2ban-client", "ping"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    labels:
+      - "com.angie-modsecurity-docker.service=fail2ban"
+      - "com.angie-modsecurity-docker.description=Intrusion prevention system"
+
+  vector:
+    image: timberio/vector:0.41.1-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-angie}-vector
+    restart: unless-stopped
+    volumes:
+      - ./vector/vector.toml:/etc/vector/vector.toml:ro
+      - ./logs:/var/log/angie
+    environment:
+      - VECTOR_CONFIG=/etc/vector/vector.toml
+    networks:
+      - angie_network
+    depends_on:
+      angie:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "vector", "validate", "/etc/vector/vector.toml"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    labels:
+      - "com.angie-modsecurity-docker.service=vector"
+      - "com.angie-modsecurity-docker.description=Log processing pipeline"
+
+networks:
+  angie_network:
+    driver: bridge
+    name: ${COMPOSE_PROJECT_NAME:-angie}_network
+
+volumes:
+  # Volume for ACME certificates and Let's Encrypt accounts
+  acme_data:
+    driver: local
+    name: ${COMPOSE_PROJECT_NAME:-angie}_acme_data

@@ -1,0 +1,75 @@
+upstream backend-app {
+    server backend-service:8080;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name proxy.example.com;
+
+    # ACME challenge is handled automatically by built-in @acme location
+
+    # Redirect to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    # HTTP/2 and HTTP/3 (QUIC) support
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    listen 443 quic;
+    listen [::]:443 quic;
+
+    http2 on;
+
+    server_name proxy.example.com;
+
+    # Built-in ACME client for automatic Let's Encrypt certificates
+    acme letsencrypt;
+    ssl_certificate     $acme_cert_letsencrypt;
+    ssl_certificate_key $acme_cert_key_letsencrypt;
+
+    # Announce HTTP/3 support
+    add_header Alt-Svc 'h3=":443"; ma=86400' always;
+
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # ModSecurity (disable for admin panels if needed)
+    modsecurity off;
+
+    # Proxying to backend application
+    location / {
+        proxy_pass http://backend-app;
+        proxy_http_version 1.1;
+
+        # WebSocket support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+
+        # Buffer settings
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+
+    # Rate limiting for backend (moderate limits)
+    limit_req zone=general burst=50 nodelay;
+}

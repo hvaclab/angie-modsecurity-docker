@@ -1,0 +1,74 @@
+# Environment files with secrets
+.env
+
+# Logs (keep .gitkeep files)
+logs/*.log
+logs/*.json
+logs/*-*.log
+logs/*.gz
+angie/logs/
+CREATION_SUMMARY.txt
+
+# SSL Certificates and Keys
+certs/*.pem
+certs/*.key
+certs/*.crt
+certs/*.csr
+certbot/letsencrypt/
+
+# Fail2Ban database
+fail2ban/db/*.sqlite3
+fail2ban/db/*.sqlite3-*
+
+# GeoIP databases (large binary files - download separately)
+geoip/*.mmdb
+geoip/*.dat
+
+# Docker volumes data
+acme_challenge/
+acme_data/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Archive directory
+archive/
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.sublime-*
+.project
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.backup
+*_backup
+backup/
+
+# Docker local build cache
+.docker/
+
+# Python (if using Python scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+
+# Node (if using Node.js tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

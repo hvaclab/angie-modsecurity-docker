@@ -1,0 +1,7 @@
+# Robots.txt for angie-modsecurity-docker
+# Customize this file for your site
+
+User-agent: *
+Allow: /
+
+# Sitemap: https://example.com/sitemap.xml
