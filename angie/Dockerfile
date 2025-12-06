@@ -8,7 +8,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Builder - download CRS rules
 # ------------------------------------------------------------------------------
-FROM alpine:3.21 AS crs-builder
+FROM alpine:3.23 AS crs-builder
 
 # Install git for cloning CRS (pinned version for reproducibility)
 # hadolint ignore=DL3018
