@@ -43,7 +43,7 @@ RUN mkdir -p /crs && \
 # ------------------------------------------------------------------------------
 # Pin to specific Angie version for reproducibility
 # Check for updates: https://angie.software/en/install/
-FROM docker.angie.software/angie:1.10.3
+FROM docker.angie.software/angie:1.11.1
 
 LABEL maintainer="hvaclab"
 LABEL description="Angie web server with ModSecurity WAF and OWASP CRS"
