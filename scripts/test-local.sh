@@ -63,10 +63,10 @@ setup_test_certs() {
         log_info "Generated self-signed certificate"
     fi
 
-    # Generate DH params if not exists (small for speed)
+    # Generate DH params if not exists (2048-bit for security)
     if [ ! -f certs/dhparam.pem ]; then
-        openssl dhparam -out certs/dhparam.pem 1024 2>/dev/null
-        log_info "Generated DH parameters"
+        openssl dhparam -out certs/dhparam.pem 2048 2>/dev/null
+        log_info "Generated DH parameters (2048-bit)"
     fi
 }
 
@@ -83,7 +83,7 @@ start_container() {
     # Wait for container to be healthy
     log_info "Waiting for container to become healthy..."
     for i in {1..30}; do
-        STATUS=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER_NAME 2>/dev/null || echo "not_found")
+        STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "not_found")
         if [ "$STATUS" = "healthy" ]; then
             log_info "Container is healthy!"
             return 0
@@ -95,7 +95,7 @@ start_container() {
     done
 
     log_error "Container did not become healthy in 60 seconds"
-    docker logs $CONTAINER_NAME
+    docker logs "$CONTAINER_NAME"
     return 1
 }
 
@@ -151,7 +151,7 @@ run_tests() {
 
     # Test 6: No critical errors in logs
     echo -n "  Checking logs for errors... "
-    if docker logs $CONTAINER_NAME 2>&1 | grep -qi "emerg\|crit"; then
+    if docker logs "$CONTAINER_NAME" 2>&1 | grep -qi "emerg\|crit"; then
         echo -e "${RED}FAIL${NC} (critical errors found)"
         FAILED=1
     else
@@ -215,6 +215,6 @@ else
     log_error "Some tests failed!"
     echo ""
     echo "Container logs:"
-    docker logs $CONTAINER_NAME 2>&1 | tail -20
+    docker logs "$CONTAINER_NAME" 2>&1 | tail -20
     exit 1
 fi

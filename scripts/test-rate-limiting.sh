@@ -20,9 +20,9 @@ echo ""
 echo "Отправка запросов..."
 echo ""
 
-for i in $(seq 1 $REQUESTS); do
+for i in $(seq 1 "$REQUESTS"); do
     # Отправить запрос и получить HTTP код
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -k $URL)
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -k "$URL")
 
     if [ "$HTTP_CODE" = "200" ]; then
         SUCCESS=$((SUCCESS + 1))
