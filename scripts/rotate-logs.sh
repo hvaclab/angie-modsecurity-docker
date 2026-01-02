@@ -42,7 +42,7 @@ rotate_log "error.log"
 docker exec angie angie -s reopen 2>/dev/null || echo "Warning: Could not reopen logs"
 
 # Удаляем логи старше KEEP_DAYS дней
-find "$LOG_DIR" -name "*.log.*.gz" -mtime +${KEEP_DAYS} -delete
+find "$LOG_DIR" -name "*.log.*.gz" -mtime +"${KEEP_DAYS}" -delete
 echo "Deleted logs older than ${KEEP_DAYS} days"
 
 # Статистика
