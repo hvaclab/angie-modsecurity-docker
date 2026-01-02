@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-01-02
+
+### Security
+- Fix shell injection vulnerabilities in scripts (quote variables)
+- Add `apk upgrade` to Dockerfile for security patches (libpng, libpq, libsodium, c-ares, busybox CVEs)
+- Pin fail2ban image to 1.1.0 instead of `:latest`
+- Increase DH params from 1024 to 2048 bits in test script
+
+### Changed
+- Update LICENSE copyright holder to hvaclab
+- Update Dockerfile maintainer label
+
 ## [1.0.0] - 2025-12-07
 
 ### Added
@@ -27,4 +39,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security headers (HSTS, CSP, X-Frame-Options, etc.)
 - Fail2Ban jails for bad requests, scans, DDoS, ModSecurity alerts
 
+[1.0.1]: https://github.com/hvaclab/angie-modsecurity-docker/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/hvaclab/angie-modsecurity-docker/releases/tag/v1.0.0
