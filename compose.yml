@@ -134,7 +134,7 @@ services:
       - "com.angie-modsecurity-docker.description=OAuth2 authentication proxy"
 
   fail2ban:
-    image: crazymax/fail2ban:latest
+    image: crazymax/fail2ban:1.1.0
     container_name: ${COMPOSE_PROJECT_NAME:-angie}-fail2ban
     restart: unless-stopped
     network_mode: "host"
