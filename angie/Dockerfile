@@ -10,9 +10,10 @@
 # ------------------------------------------------------------------------------
 FROM alpine:3.21 AS crs-builder
 
-# Install git for cloning CRS (pinned version for reproducibility)
+# Update packages and install git for cloning CRS
 # hadolint ignore=DL3018
-RUN apk add --no-cache git~=2.47
+RUN apk upgrade --no-cache && \
+    apk add --no-cache git
 
 # Clone OWASP CoreRuleSet (auto-updated on each build)
 ARG CRS_VERSION=v4.18.0
@@ -44,15 +45,15 @@ RUN mkdir -p /crs && \
 # Check for updates: https://angie.software/en/install/
 FROM docker.angie.software/angie:1.10.3
 
-LABEL maintainer="your-email@example.com"
+LABEL maintainer="hvaclab"
 LABEL description="Angie web server with ModSecurity WAF and OWASP CRS"
 LABEL version="1.0.0"
 LABEL org.opencontainers.image.source="https://github.com/hvaclab/angie-modsecurity-docker"
 
-# Install tools for auto-setup (curl for GeoIP, openssl for DH params)
-# Versions pinned for reproducibility (Alpine 3.21 packages)
+# Update system packages to get security patches, then install tools
 # hadolint ignore=DL3018
-RUN apk add --no-cache curl~=8.14 openssl~=3.3
+RUN apk upgrade --no-cache && \
+    apk add --no-cache curl openssl
 
 # Copy CRS rules from builder
 COPY --from=crs-builder /crs/coreruleset /var/lib/angie/modsecurity/coreruleset
